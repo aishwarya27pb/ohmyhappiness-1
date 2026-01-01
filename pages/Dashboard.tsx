@@ -4,13 +4,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { CreditCard, Package, Users, TrendingUp, Calendar, ChevronRight } from 'lucide-react';
 
 const data = [
-  { name: 'Jan', spend: 4000 },
-  { name: 'Feb', spend: 3000 },
-  { name: 'Mar', spend: 2000 },
-  { name: 'Apr', spend: 2780 },
-  { name: 'May', spend: 1890 },
-  { name: 'Jun', spend: 2390 },
-  { name: 'Jul', spend: 3490 },
+  { name: 'Jan', spend: 400000 },
+  { name: 'Feb', spend: 300000 },
+  { name: 'Mar', spend: 200000 },
+  { name: 'Apr', spend: 278000 },
+  { name: 'May', spend: 189000 },
+  { name: 'Jun', spend: 239000 },
+  { name: 'Jul', spend: 349000 },
 ];
 
 const Dashboard: React.FC = () => {
@@ -32,7 +32,7 @@ const Dashboard: React.FC = () => {
         {[
           { icon: <Package className="text-indigo-600" />, label: 'Total Gifts Sent', value: '1,284', trend: '+12%' },
           { icon: <Users className="text-emerald-600" />, label: 'Active Recipients', value: '458', trend: '+5%' },
-          { icon: <CreditCard className="text-amber-600" />, label: 'Monthly Spend', value: '$12,450', trend: '-2%' },
+          { icon: <CreditCard className="text-amber-600" />, label: 'Monthly Spend', value: '₹12,45,000', trend: '-2%' },
           { icon: <TrendingUp className="text-indigo-600" />, label: 'Impact Score', value: '98/100', trend: '+1%' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
@@ -52,7 +52,7 @@ const Dashboard: React.FC = () => {
         {/* Main Chart */}
         <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-xl font-bold text-slate-900">Spend Analytics</h2>
+            <h2 className="text-xl font-bold text-slate-900">Spend Analytics (INR)</h2>
             <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg">
               <button className="px-3 py-1 text-xs font-bold rounded-md bg-white shadow-sm">6 Months</button>
               <button className="px-3 py-1 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors">Yearly</button>
@@ -71,6 +71,7 @@ const Dashboard: React.FC = () => {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                 <Tooltip 
+                  formatter={(value: number) => ['₹' + value.toLocaleString('en-IN'), 'Spend']}
                   contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
                 />
                 <Area type="monotone" dataKey="spend" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorSpend)" />

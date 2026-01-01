@@ -154,13 +154,13 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onAddToCa
                   <div className="h-10 w-px bg-slate-100" />
                   <div>
                     <span className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Price Each</span>
-                    <span className="text-xl font-black text-slate-900">${product.price}</span>
+                    <span className="text-xl font-black text-slate-900">₹{product.price.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
                 
                 <div className="text-right">
                   <span className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Est. Total</span>
-                  <span className="text-4xl font-black text-slate-900">${totalPrice.toLocaleString()}</span>
+                  <span className="text-4xl font-black text-slate-900">₹{totalPrice.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 

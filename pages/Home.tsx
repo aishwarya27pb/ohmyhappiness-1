@@ -8,17 +8,17 @@ interface HomeProps {
 
 const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const categories = [
-    { name: 'Employee Welcome Kits', icon: <Briefcase className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=600', color: 'from-blue-600/20 to-indigo-600/20' },
-    { name: 'Client Gifts', icon: <Shield className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=600', color: 'from-amber-600/20 to-orange-600/20' },
-    { name: 'Eco-Friendly Gifts', icon: <Leaf className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&q=80&w=600', color: 'from-emerald-600/20 to-green-600/20' },
-    { name: 'Drinkware', icon: <Coffee className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1602143307185-8a1a598103d1?auto=format&fit=crop&q=80&w=600', color: 'from-rose-600/20 to-pink-600/20' },
-    { name: 'Promotional Products', icon: <Package className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1610940882244-1fbcfe928bc6?auto=format&fit=crop&q=80&w=600', color: 'from-slate-600/20 to-slate-900/20' },
+    { name: 'Employee Welcome Kits', icon: <Briefcase className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&q=80&w=600', color: 'from-blue-600/20 to-indigo-600/20' },
+    { name: 'Client Gifts', icon: <Shield className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=600', color: 'from-amber-600/20 to-orange-600/20' },
+    { name: 'Eco-Friendly Gifts', icon: <Leaf className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&q=80&w=600', color: 'from-emerald-600/20 to-green-600/20' },
+    { name: 'Drinkware', icon: <Coffee className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1517254456976-ee8682099819?auto=format&fit=crop&q=80&w=600', color: 'from-rose-600/20 to-pink-600/20' },
+    { name: 'Promotional Products', icon: <Package className="w-8 h-8" />, img: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600', color: 'from-slate-600/20 to-slate-900/20' },
   ];
 
   return (
     <div className="animate-in fade-in duration-700">
       {/* Hero Section */}
-      <section className="relative py-12 lg:py-24 overflow-hidden">
+      <section className="relative pt-12 lg:pt-20 pb-12 lg:pb-16 overflow-hidden">
         <div className="absolute top-0 right-0 -z-10 w-full lg:w-1/2 h-full bg-amber-50/50 lg:rounded-bl-[200px]" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -45,16 +45,17 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 </button>
                 <button 
                   onClick={() => onNavigate('ai')}
-                  className="flex items-center justify-center gap-2 border-2 border-slate-200 text-slate-900 px-10 py-5 rounded-2xl text-lg font-bold hover:border-amber-500 hover:text-amber-600 transition-all bg-white"
+                  className="flex items-center justify-center gap-2 border-2 border-slate-200 text-slate-900 px-10 py-5 rounded-2xl text-lg font-bold hover:border-amber-500 hover:text-amber-600 transition-all bg-white shadow-sm"
                 >
                   Joy Concierge
                 </button>
               </div>
               
-              <div className="mt-16 flex flex-wrap justify-center lg:justify-start items-center gap-8 opacity-40 grayscale">
-                <img src="https://picsum.photos/seed/l1/120/40" alt="Client" className="h-6" />
-                <img src="https://picsum.photos/seed/l2/120/40" alt="Client" className="h-6" />
-                <img src="https://picsum.photos/seed/l3/120/40" alt="Client" className="h-6" />
+              <div className="mt-12 flex flex-wrap justify-center lg:justify-start items-center gap-8 text-slate-300 font-black tracking-widest uppercase text-xs">
+                <span className="hover:text-slate-400 transition-colors">TechFlow</span>
+                <span className="hover:text-slate-400 transition-colors">Nexus Corp</span>
+                <span className="hover:text-slate-400 transition-colors">Vantage Group</span>
+                <span className="hover:text-slate-400 transition-colors">Zenith Inc</span>
               </div>
             </div>
             
@@ -83,7 +84,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       </section>
 
       {/* Categories Section */}
-      <section className="py-24 bg-slate-50">
+      <section className="py-16 lg:py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
             <div className="max-w-2xl">

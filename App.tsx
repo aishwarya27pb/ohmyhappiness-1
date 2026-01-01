@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar';
 import ProductCard from './components/ProductCard';
 import ProductModal from './components/ProductModal';
@@ -8,21 +8,25 @@ import AIConcierge from './pages/AIConcierge';
 import Dashboard from './pages/Dashboard';
 import { PRODUCTS } from './constants';
 import { Product, CartItem, User } from './types';
-import { ShoppingCart, Trash2, ChevronRight, X, Heart, Search, SlidersHorizontal, Package, CheckCircle2, User as UserIcon, Lock, Mail, Filter, ArrowUpDown } from 'lucide-react';
+import { supabase } from './lib/supabaseClient';
+import { ShoppingCart, Trash2, ChevronRight, X, Heart, Search, SlidersHorizontal, Package, CheckCircle2, User as UserIcon, Lock, Mail, Filter, ArrowUpDown, ArrowLeft, Loader2, Building2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [wishlist, setWishlist] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   
   // Filtering & Sorting State
   const [sortBy, setSortBy] = useState('Popular');
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 50000]);
   const [stockOnly, setStockOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -34,48 +38,216 @@ const App: React.FC = () => {
     confirmPassword: ''
   });
 
-  const categories = [
-    'All', 
-    'Employee Welcome Kits', 
-    'Client Gifts', 
-    'Eco-Friendly Gifts', 
-    'Employee Gifts', 
-    'Drinkware', 
-    'Promotional Products',
-    'Electronics',
-    'Stationery',
-    'Food & Beverage',
-    'Wellness',
-    'Apparel'
-  ];
+  // Optimized profile fetching with fallback
+  const fetchUserProfile = useCallback(async (userId: string, retries = 2) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error || !data) {
+        if (retries > 0) {
+          await new Promise(res => setTimeout(res, 500));
+          return fetchUserProfile(userId, retries - 1);
+        }
+        throw error || new Error("Profile not found");
+      }
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+      setUser({
+        id: data.id,
+        name: data.name || data.username || 'User',
+        email: data.email || '',
+        company: data.company || 'Corporate Partner',
+        role: data.role || 'buyer'
+      });
+    } catch (err) {
+      console.warn("Profile fetch failed, using auth metadata fallback");
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        setUser({
+          id: authUser.id,
+          name: authUser.user_metadata?.username || 'User',
+          email: authUser.email || '',
+          company: 'Corporate Partner',
+          role: 'buyer'
+        });
+      }
+    }
+  }, []);
+
+  // Sync Auth State
+  useEffect(() => {
+    let mounted = true;
+
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && mounted) {
+          await fetchUserProfile(session.user.id);
+        }
+      } catch (err) {
+        console.error("Auth initialization failed:", err);
+      } finally {
+        if (mounted) setIsInitialLoading(false);
+      }
+    };
+
+    // Fail-safe: Force clear loading after 3 seconds even if requests hang
+    const timer = setTimeout(() => {
+      if (mounted && isInitialLoading) {
+        console.warn("Auth initialization timed out, clearing loading state");
+        setIsInitialLoading(false);
+      }
+    }, 3500);
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user && mounted) {
+          await fetchUserProfile(session.user.id);
+          setShowLogin(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        if (mounted) {
+          setUser(null);
+          setWishlist([]);
+          setCart([]);
+          setCurrentPage('home');
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
+  }, [fetchUserProfile]);
+
+  // Sync Wishlist from database
+  useEffect(() => {
+    if (user?.id) {
+      const fetchWishlist = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('wishlists')
+            .select('product_id')
+            .eq('user_id', user.id);
+          
+          if (!error && data) {
+            setWishlist(data.map(item => item.product_id));
+          } else if (error) {
+            console.error("Wishlist Fetch Error:", error.message);
+          }
+        } catch (err) {
+          console.error("Error in wishlist sync:", err);
+        }
+      };
+      fetchWishlist();
+    }
+  }, [user?.id]);
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSignUp && authForm.password !== authForm.confirmPassword) {
-      alert("Passwords do not match!");
+    if (authLoading) return;
+    setAuthLoading(true);
+
+    try {
+      if (isSignUp) {
+        if (authForm.password !== authForm.confirmPassword) {
+          throw new Error("Passwords do not match!");
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email: authForm.email,
+          password: authForm.password,
+          options: { data: { username: authForm.username } }
+        });
+        if (error) throw error;
+        if (data.session) {
+          await fetchUserProfile(data.session.user.id);
+          setShowLogin(false);
+        } else {
+          alert("Please check your email to verify your account!");
+          setShowLogin(false);
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authForm.email,
+          password: authForm.password,
+        });
+        if (error) throw error;
+        if (data.user) {
+          await fetchUserProfile(data.user.id);
+          setShowLogin(false);
+        }
+      }
+      setAuthForm({ username: '', email: '', password: '', confirmPassword: '' });
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      // Explicitly clear local state for instant UI update
+      setUser(null);
+      setWishlist([]);
+      setCart([]);
+      setCurrentPage('home');
+    } catch (err) {
+      console.error("Logout failed:", err);
+      // Even if API fails, clear local state
+      setUser(null);
+      setWishlist([]);
+      setCart([]);
+      setCurrentPage('home');
+    }
+  };
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) {
+      setShowLogin(true);
       return;
     }
-    const authenticatedUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: isSignUp ? authForm.username : (authForm.email.split('@')[0] || 'User'),
-      email: authForm.email,
-      company: 'Corporate Partner',
-      role: 'buyer'
-    };
-    setUser(authenticatedUser);
-    setShowLogin(false);
-    setAuthForm({ username: '', email: '', password: '', confirmPassword: '' });
-    setCurrentPage('dashboard');
-  };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setAuthForm(prev => ({ ...prev, [name]: value }));
-  };
+    const isCurrentlyWishlisted = wishlist.includes(productId);
+    
+    // Optimistic Update
+    setWishlist(prev => 
+      isCurrentlyWishlisted 
+        ? prev.filter(id => id !== productId) 
+        : [...prev, productId]
+    );
 
-  const handleLogout = () => {
-    setUser(null);
-    setCurrentPage('home');
+    try {
+      if (isCurrentlyWishlisted) {
+        const { error } = await supabase
+          .from('wishlists')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('wishlists')
+          .insert([{ user_id: user.id, product_id: productId }]);
+        
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      console.error("Wishlist sync failed. Check Supabase RLS policies for table 'wishlists'.", err.message);
+      // Revert optimistic update
+      setWishlist(prev => 
+        isCurrentlyWishlisted ? [...prev, productId] : prev.filter(id => id !== productId)
+      );
+    }
   };
 
   const addToCart = (item: CartItem) => {
@@ -105,7 +277,6 @@ const App: React.FC = () => {
       return matchesCategory && matchesSearch && matchesPrice && matchesStock;
     });
 
-    // Apply Sorting
     switch (sortBy) {
       case 'Price: Low to High': result.sort((a, b) => a.price - b.price); break;
       case 'Price: High to Low': result.sort((a, b) => b.price - a.price); break;
@@ -116,6 +287,10 @@ const App: React.FC = () => {
     
     return result;
   }, [activeCategory, searchQuery, priceRange, stockOnly, sortBy]);
+
+  const wishlistedProducts = useMemo(() => {
+    return PRODUCTS.filter(p => wishlist.includes(p.id));
+  }, [wishlist]);
 
   const handleNavigation = (page: string, category?: string) => {
     if (page === 'login') {
@@ -128,11 +303,59 @@ const App: React.FC = () => {
     }
   };
 
+  const formatCurrency = (val: number) => {
+    return '₹' + val.toLocaleString('en-IN');
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'home': return <Home onNavigate={handleNavigation} />;
       case 'ai': return <AIConcierge />;
       case 'dashboard': return <Dashboard />;
+      case 'wishlist':
+        return (
+          <div className="animate-in fade-in duration-500 max-w-7xl mx-auto px-4 py-16">
+            <div className="mb-12">
+              <button 
+                onClick={() => setCurrentPage('catalog')}
+                className="flex items-center gap-2 text-slate-400 hover:text-slate-900 font-bold mb-6 transition-colors group"
+              >
+                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                Back to Catalog
+              </button>
+              <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 serif">The Happiness <span className="text-rose-500">Vault</span></h1>
+              <p className="text-slate-500 mt-4 text-lg">Your curated selections of joy, saved for later.</p>
+            </div>
+
+            {wishlistedProducts.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                {wishlistedProducts.map(p => (
+                  <ProductCard 
+                    key={p.id} 
+                    product={p} 
+                    onClick={setSelectedProduct} 
+                    isWishlisted={true}
+                    onToggleWishlist={() => toggleWishlist(p.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-32 bg-white rounded-[3rem] border border-dashed border-slate-200">
+                <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Heart className="w-10 h-10 text-rose-200" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-2">Your vault is empty</h3>
+                <p className="text-slate-400 max-w-sm mx-auto">Start browsing our catalog and save the items that spark the most happiness.</p>
+                <button 
+                  onClick={() => setCurrentPage('catalog')}
+                  className="mt-8 bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-rose-500 transition-all shadow-xl"
+                >
+                  Explore Catalog
+                </button>
+              </div>
+            )}
+          </div>
+        );
       case 'catalog':
         return (
           <div className="animate-in fade-in duration-500">
@@ -156,11 +379,10 @@ const App: React.FC = () => {
             </div>
 
             <div className="max-w-7xl mx-auto px-4 py-16">
-              {/* Toolbar */}
               <div className="sticky top-24 z-40 space-y-4 mb-20">
                 <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-white/80 backdrop-blur-md p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
                   <div className="flex flex-wrap gap-2 justify-center overflow-x-auto max-w-full lg:max-w-none pb-2 lg:pb-0">
-                    {categories.map(cat => (
+                    {['All', ...new Set(PRODUCTS.map(p => p.category))].map(cat => (
                       <button
                         key={cat}
                         onClick={() => setActiveCategory(cat)}
@@ -191,7 +413,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Filters Drawer */}
                 {showFilters && (
                   <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-in slide-in-from-top-4 duration-300">
                     <div className="grid md:grid-cols-3 gap-12">
@@ -218,14 +439,14 @@ const App: React.FC = () => {
                           <input 
                             type="range" 
                             min="0" 
-                            max="500" 
-                            step="10"
+                            max="50000" 
+                            step="500"
                             value={priceRange[1]}
                             onChange={(e) => setPriceRange([0, parseInt(e.target.value)])}
                             className="flex-grow accent-rose-500"
                           />
                           <span className="font-black text-slate-900 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                            Up to ${priceRange[1]}
+                            Up to {formatCurrency(priceRange[1])}
                           </span>
                         </div>
                       </div>
@@ -247,7 +468,6 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Grid */}
               <div className="mb-10 flex items-center gap-4">
                 <h2 className="text-3xl font-bold text-slate-900 serif">
                   {searchQuery ? `Search Results for "${searchQuery}"` : activeCategory}
@@ -258,7 +478,13 @@ const App: React.FC = () => {
               {processedProducts.length > 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                   {processedProducts.map(p => (
-                    <ProductCard key={p.id} product={p} onClick={setSelectedProduct} />
+                    <ProductCard 
+                      key={p.id} 
+                      product={p} 
+                      onClick={setSelectedProduct} 
+                      isWishlisted={wishlist.includes(p.id)}
+                      onToggleWishlist={() => toggleWishlist(p.id)}
+                    />
                   ))}
                 </div>
               ) : (
@@ -267,7 +493,7 @@ const App: React.FC = () => {
                   <h3 className="text-2xl font-bold text-slate-900 mb-2">No items match your criteria</h3>
                   <p className="text-slate-400">Try adjusting your filters or price range.</p>
                   <button 
-                    onClick={() => {setActiveCategory('All'); setSearchQuery(''); setPriceRange([0, 1000]); setStockOnly(false);}}
+                    onClick={() => {setActiveCategory('All'); setSearchQuery(''); setPriceRange([0, 50000]); setStockOnly(false);}}
                     className="mt-8 text-rose-500 font-black uppercase tracking-widest text-sm hover:underline"
                   >
                     Reset All Filters
@@ -315,14 +541,14 @@ const App: React.FC = () => {
                         <div className="mt-8 flex items-center justify-between">
                           <div className="flex flex-col">
                             <span className="text-xs font-black text-slate-300 uppercase">Per Item</span>
-                            <span className="font-black text-slate-900 text-xl">${item.price}</span>
+                            <span className="font-black text-slate-900 text-xl">{formatCurrency(item.price)}</span>
                           </div>
                           <div className="bg-slate-900 text-white px-6 py-2 rounded-xl text-lg font-black">
                             Qty: {item.quantity}
                           </div>
                           <div className="flex flex-col text-right">
                             <span className="text-xs font-black text-slate-300 uppercase">Subtotal</span>
-                            <span className="font-black text-slate-900 text-xl">${(item.price * item.quantity).toLocaleString()}</span>
+                            <span className="font-black text-slate-900 text-xl">{formatCurrency(item.price * item.quantity)}</span>
                           </div>
                         </div>
                       </div>
@@ -342,7 +568,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="pt-6 border-t border-slate-100 flex justify-between font-black text-4xl text-slate-900">
                       <span>Total</span>
-                      <span>${cartTotal.toLocaleString()}</span>
+                      <span>{formatCurrency(cartTotal)}</span>
                     </div>
                   </div>
                   <button className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl hover:bg-rose-500 transition-all flex items-center justify-center gap-3 shadow-2xl hover:shadow-rose-100">
@@ -358,10 +584,24 @@ const App: React.FC = () => {
     }
   };
 
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center bg-rose-500 p-4 rounded-2xl shadow-2xl mb-4 animate-bounce">
+            <Heart className="w-8 h-8 text-white fill-current" />
+          </div>
+          <p className="text-slate-400 font-bold tracking-widest uppercase text-xs">Recovering Joy...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
       <Navbar 
         cartCount={cart.reduce((s, i) => s + i.quantity, 0)} 
+        wishlistCount={wishlist.length}
         user={user} 
         onLogout={handleLogout}
         onNavigate={handleNavigation}
@@ -376,66 +616,9 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Footer & Auth Modal same as before */}
-      {/* ... (footer remains same) ... */}
-      <footer className="bg-white border-t border-slate-200 py-24 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-16">
-            <div className="md:col-span-1">
-              <div className="flex items-center space-x-2 mb-8">
-                <div className="bg-rose-500 p-2 rounded-xl shadow-lg">
-                  <Heart className="w-6 h-6 text-white fill-current" />
-                </div>
-                <span className="text-2xl font-bold text-slate-900 serif">Oh My <span className="text-rose-500">Happiness</span></span>
-              </div>
-              <p className="text-slate-400 text-lg leading-relaxed font-medium">
-                Designing moments of corporate joy through artisanal quality and intelligent curation.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-black uppercase tracking-[0.2em] text-slate-900 text-xs mb-8">Collections</h4>
-              <ul className="space-y-5 text-slate-500 font-bold">
-                {categories.filter(c => c !== 'All').map(c => (
-                  <li key={c} onClick={() => {handleNavigation('catalog', c);}} className="hover:text-rose-500 cursor-pointer transition-colors">{c}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-black uppercase tracking-[0.2em] text-slate-900 text-xs mb-8">Support</h4>
-              <ul className="space-y-5 text-slate-500 font-bold">
-                <li className="hover:text-rose-500 cursor-pointer">Shipping Policy</li>
-                <li className="hover:text-rose-500 cursor-pointer">Bulk Discounts</li>
-                <li className="hover:text-rose-500 cursor-pointer">Branding Guide</li>
-                <li className="hover:text-rose-500 cursor-pointer">Sustainability</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-black uppercase tracking-[0.2em] text-slate-900 text-xs mb-8">Corporate Joy</h4>
-              <p className="text-slate-500 mb-6 font-medium">Join 2,000+ HR leaders receiving our weekly happiness insights.</p>
-              <div className="flex flex-col gap-3">
-                <input 
-                  type="email" 
-                  placeholder="Business email" 
-                  className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm w-full focus:ring-2 focus:ring-rose-500 outline-none font-bold"
-                />
-                <button className="bg-slate-900 text-white px-6 py-4 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-rose-500 transition-all shadow-xl">Join List</button>
-              </div>
-            </div>
-          </div>
-          <div className="mt-24 pt-10 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">
-            <p>© 2024 Oh My Happiness Inc. All Rights Reserved.</p>
-            <div className="flex gap-12">
-              <span className="hover:text-slate-900 cursor-pointer">Privacy</span>
-              <span className="hover:text-slate-900 cursor-pointer">Terms</span>
-              <span className="hover:text-slate-900 cursor-pointer">Logistics</span>
-            </div>
-          </div>
-        </div>
-      </footer>
-
       {showLogin && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md" onClick={() => setShowLogin(false)} />
+          <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md" onClick={() => !authLoading && setShowLogin(false)} />
           <div className="relative bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden p-10 animate-in zoom-in-95 duration-300">
             <button onClick={() => setShowLogin(false)} className="absolute top-8 right-8 p-2.5 text-slate-300 hover:text-slate-900 transition-all">
               <X className="w-6 h-6" />
@@ -453,7 +636,7 @@ const App: React.FC = () => {
                   <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-2">Username</label>
                   <div className="relative">
                     <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                    <input type="text" name="username" required value={authForm.username} onChange={handleInputChange} placeholder="Display Name" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
+                    <input type="text" name="username" required value={authForm.username} onChange={(e) => setAuthForm(prev => ({...prev, username: e.target.value}))} placeholder="Display Name" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
                   </div>
                 </div>
               )}
@@ -461,7 +644,7 @@ const App: React.FC = () => {
                 <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-2">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                  <input type="email" name="email" required value={authForm.email} onChange={handleInputChange} placeholder="name@company.com" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
+                  <input type="email" name="email" required value={authForm.email} onChange={(e) => setAuthForm(prev => ({...prev, email: e.target.value}))} placeholder="name@company.com" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
                 </div>
               </div>
               <div className="relative">
@@ -471,7 +654,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                  <input type="password" name="password" required value={authForm.password} onChange={handleInputChange} placeholder="••••••••" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
+                  <input type="password" name="password" required value={authForm.password} onChange={(e) => setAuthForm(prev => ({...prev, password: e.target.value}))} placeholder="••••••••" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
                 </div>
               </div>
               {isSignUp && (
@@ -479,12 +662,16 @@ const App: React.FC = () => {
                   <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-2">Confirm Password</label>
                   <div className="relative">
                     <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                    <input type="password" name="confirmPassword" required value={authForm.confirmPassword} onChange={handleInputChange} placeholder="••••••••" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
+                    <input type="password" name="confirmPassword" required value={authForm.confirmPassword} onChange={(e) => setAuthForm(prev => ({...prev, confirmPassword: e.target.value}))} placeholder="••••••••" className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.2rem] px-12 py-3.5 focus:border-rose-500 outline-none transition-all text-base font-bold" />
                   </div>
                 </div>
               )}
-              <button type="submit" className="w-full bg-slate-900 text-white py-4.5 rounded-[1.2rem] font-black text-lg hover:bg-rose-500 transition-all shadow-xl hover:shadow-rose-100 active:scale-95 mt-4">
-                {isSignUp ? 'Create Account' : 'Sign In'}
+              <button 
+                type="submit" 
+                disabled={authLoading}
+                className="w-full bg-slate-900 text-white py-4.5 rounded-[1.2rem] font-black text-lg hover:bg-rose-500 transition-all shadow-xl hover:shadow-rose-100 active:scale-95 mt-4 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isSignUp ? 'Create Account' : 'Sign In')}
               </button>
             </form>
             <div className="mt-8 text-center border-t border-slate-100 pt-6">

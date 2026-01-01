@@ -9,7 +9,7 @@ const AIConcierge: React.FC = () => {
   const [result, setResult] = useState<string | null>(null);
   const [params, setParams] = useState<RecommendationRequest>({
     occasion: 'Holiday Gifting',
-    budget: '$50-$100',
+    budget: '₹5000-₹15000',
     recipientCount: '25',
     tone: 'Professional'
   });
@@ -34,7 +34,7 @@ const AIConcierge: React.FC = () => {
         </div>
         <h1 className="text-4xl font-bold text-slate-900 serif mb-4">Meet your AI Gift Concierge</h1>
         <p className="text-slate-600 max-w-2xl mx-auto">
-          Describe your gifting needs, and our Gemini-powered assistant will curate the perfect strategy for your team or clients.
+          Describe your gifting needs, and our Gemini-powered assistant will curate the perfect strategy for your team or clients in INR.
         </p>
       </div>
 
@@ -65,7 +65,7 @@ const AIConcierge: React.FC = () => {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-3">Budget Per Recipient</label>
               <div className="grid grid-cols-3 gap-3">
-                {['<$50', '$50-$100', '$100+'].map(v => (
+                {['< ₹5000', '₹5000-₹15000', '₹15000+'].map(v => (
                   <button
                     key={v}
                     onClick={() => handleQuickSelect('budget', v)}

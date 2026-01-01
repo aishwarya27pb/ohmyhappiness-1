@@ -4,12 +4,13 @@ import { ShoppingCart, User, Menu, LogOut, Heart, X } from 'lucide-react';
 
 interface NavbarProps {
   cartCount: number;
+  wishlistCount?: number;
   user: any;
   onLogout: () => void;
   onNavigate: (page: string) => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ cartCount, user, onLogout, onNavigate }) => {
+const Navbar: React.FC<NavbarProps> = ({ cartCount, wishlistCount = 0, user, onLogout, onNavigate }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const navigate = (page: string) => {
@@ -44,8 +45,22 @@ const Navbar: React.FC<NavbarProps> = ({ cartCount, user, onLogout, onNavigate }
 
           <div className="flex items-center space-x-3">
             <button 
+              onClick={() => navigate('wishlist')}
+              className="relative p-2.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              aria-label="Wishlist"
+            >
+              <Heart className={`w-5 h-5 ${wishlistCount > 0 ? 'text-rose-500 fill-rose-500' : ''}`} />
+              {wishlistCount > 0 && (
+                <span className="absolute top-0 right-0 h-4 w-4 rounded-full bg-slate-900 text-white text-[8px] font-bold flex items-center justify-center border border-white">
+                  {wishlistCount}
+                </span>
+              )}
+            </button>
+
+            <button 
               onClick={() => navigate('cart')}
               className="relative p-2.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              aria-label="Cart"
             >
               <ShoppingCart className="w-5 h-5" />
               {cartCount > 0 && (
@@ -91,12 +106,12 @@ const Navbar: React.FC<NavbarProps> = ({ cartCount, user, onLogout, onNavigate }
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
       {isMenuOpen && (
         <div className="md:hidden absolute top-20 left-0 w-full bg-white border-b border-slate-200 shadow-2xl animate-in slide-in-from-top duration-200">
           <div className="px-4 pt-4 pb-8 space-y-4">
             <button onClick={() => navigate('home')} className="block w-full text-left px-4 py-3 text-lg font-semibold text-slate-800 hover:bg-slate-50 rounded-xl">Home</button>
             <button onClick={() => navigate('catalog')} className="block w-full text-left px-4 py-3 text-lg font-semibold text-slate-800 hover:bg-slate-50 rounded-xl">Catalog</button>
+            <button onClick={() => navigate('wishlist')} className="block w-full text-left px-4 py-3 text-lg font-semibold text-rose-500 hover:bg-slate-50 rounded-xl">My Wishlist</button>
             <button onClick={() => navigate('ai')} className="block w-full text-left px-4 py-3 text-lg font-semibold text-amber-600 hover:bg-slate-50 rounded-xl">AI Concierge</button>
             <button onClick={() => navigate('about')} className="block w-full text-left px-4 py-3 text-lg font-semibold text-slate-800 hover:bg-slate-50 rounded-xl">Bulk Orders</button>
             <div className="pt-4 border-t border-slate-100">
